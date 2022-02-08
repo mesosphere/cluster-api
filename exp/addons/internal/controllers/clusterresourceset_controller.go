@@ -234,7 +234,7 @@ func (r *ClusterResourceSetReconciler) getClustersByClusterResourceSetSelector(c
 		return nil, errors.Wrap(err, "failed to list clusters")
 	}
 
-	clusters := []*clusterv1.Cluster{}
+	clusters := make([]*clusterv1.Cluster, 0)
 	for i := range clusterList.Items {
 		c := &clusterList.Items[i]
 		if c.DeletionTimestamp.IsZero() {

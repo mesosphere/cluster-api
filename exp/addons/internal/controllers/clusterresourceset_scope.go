@@ -82,6 +82,8 @@ func newResourceReconcileScope(
 		return &reconcileApplyOnceScope{base}
 	case addonsv1.ClusterResourceSetStrategyReconcile:
 		return &reconcileStrategyScope{base}
+	case addonsv1.ClusterResourceSetStrategyApplyAlways:
+		return &reconcileStrategyScope{base}
 	default:
 		return nil
 	}

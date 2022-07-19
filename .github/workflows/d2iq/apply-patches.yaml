@@ -1,0 +1,22 @@
+name: Patch
+
+on:
+  push:
+    branches:
+      - release/**
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out patches from branch
+      uses: actions/checkout@v3
+      with:
+        repository: 'mesosphere/cluster-api'
+        ref: 'd2iq-patches'
+        path: 'patches'
+    - name: Check out code
+      uses: actions/checkout@v3
+    - name: Apply patches
+      run: |
+        git apply patches/release-1.1/*.patch --directory 'src/sigs.k8s.io/cluster-api'

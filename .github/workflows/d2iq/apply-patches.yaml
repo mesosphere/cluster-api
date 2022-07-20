@@ -1,4 +1,4 @@
-name: Patch
+name: Apply ClusterResourceSet ApplyAlways Strategy Patches
 
 on:
   push:
@@ -9,14 +9,20 @@ jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
-    - name: Check out patches from branch
+    - name: Check out patch branch
       uses: actions/checkout@v3
       with:
-        repository: 'mesosphere/cluster-api'
-        ref: 'd2iq-patches'
         path: 'patches'
-    - name: Check out code
+        repository: 'mesosphere/cluster-api'
+        ref: 'crs-apply-always'
+    - name: Check out target branch
       uses: actions/checkout@v3
+      with:
+        path: 'cluster-api'
     - name: Apply patches
       run: |
-        git apply patches/release-1.1/*.patch --directory 'src/sigs.k8s.io/cluster-api'
+        git apply \
+          *.patch \
+          --directory cluster-api
+    - name: Create pull request
+      uses: peter-evans/create-pull-request@v4

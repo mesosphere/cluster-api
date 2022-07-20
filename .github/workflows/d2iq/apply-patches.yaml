@@ -14,7 +14,7 @@ jobs:
       with:
         path: 'patches'
         repository: 'mesosphere/cluster-api'
-        ref: 'crs-apply-always'
+        ref: 'crs-strategy-applyalways'
     - name: Check out target branch
       uses: actions/checkout@v3
       with:
@@ -22,7 +22,10 @@ jobs:
     - name: Apply patches
       run: |
         git apply \
-          *.patch \
+          patches/*.patch \
           --directory cluster-api
     - name: Create pull request
       uses: peter-evans/create-pull-request@v4
+      with:
+        path: 'cluster-api'
+        commit-message: "feat: Add ClusterResourceSet ApplyAlways Strategy"

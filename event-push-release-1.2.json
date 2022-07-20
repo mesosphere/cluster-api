@@ -1,0 +1,5 @@
+{
+  "push": {
+      "ref": "refs/heads/release-1.2"
+  }
+}

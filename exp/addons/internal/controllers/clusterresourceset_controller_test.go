@@ -70,11 +70,11 @@ func TestClusterResourceSetReconciler(t *testing.T) {
 				Namespace: ns.Name,
 			},
 			Data: map[string]string{
-				"cm": `metadata:
- name: resource-configmap
- namespace: default
-kind: ConfigMap
-apiVersion: v1`,
+				"cm": `kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: resource-configmap
+  namespace: default`,
 			},
 		}
 		testSecret := &corev1.Secret{
@@ -84,12 +84,11 @@ apiVersion: v1`,
 			},
 			Type: "addons.cluster.x-k8s.io/resource-set",
 			StringData: map[string]string{
-				"cm": `metadata:
-kind: ConfigMap
+				"cm": `kind: ConfigMap
 apiVersion: v1
 metadata:
- name: resource-configmap
- namespace: default`,
+  name: resource-configmap
+  namespace: default`,
 			},
 		}
 		t.Log("Creating a Secret and a ConfigMap with ConfigMap in their data field")
@@ -391,10 +390,6 @@ metadata:
 		testCluster.SetLabels(labels)
 		g.Expect(env.Update(ctx, testCluster)).To(Succeed())
 
-		// Must sleep here to make sure resource is created after the previous reconcile.
-		// If the resource is created in between, predicates are not used as intended in this test.
-		time.Sleep(2 * time.Second)
-
 		t.Log("Verifying ClusterResourceSetBinding is created with cluster owner reference")
 		// Wait until ClusterResourceSetBinding is created for the Cluster
 		clusterResourceSetBindingKey := client.ObjectKey{
@@ -420,6 +415,10 @@ metadata:
 			}
 			return false
 		}, timeout).Should(BeTrue())
+
+		// Must sleep here to make sure resource is created after the previous reconcile.
+		// If the resource is created in between, predicates are not used as intended in this test.
+		time.Sleep(2 * time.Second)
 
 		newSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -586,6 +585,392 @@ metadata:
 				return len(crs.Finalizers) > 0
 			}
 			return false
+		}, timeout).Should(BeTrue())
+	})
+
+	t.Run("Should create ClusterResourceSet with strategy 'AlwaysApply' and reconcile when configmap changes data", func(t *testing.T) {
+		g := NewWithT(t)
+		ns := setup(t, g)
+		defer teardown(t, g, ns)
+
+		t.Log("Updating the cluster with labels")
+		testCluster.SetLabels(labels)
+		g.Expect(env.Update(ctx, testCluster)).To(Succeed())
+
+		clusterResourceSetInstance := &addonsv1.ClusterResourceSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterResourceSetName,
+				Namespace: ns.Name,
+			},
+			Spec: addonsv1.ClusterResourceSetSpec{
+				ClusterSelector: metav1.LabelSelector{
+					MatchLabels: labels,
+				},
+				Strategy:  "ApplyAlways",
+				Resources: []addonsv1.ResourceRef{{Name: configmapName, Kind: "ConfigMap"}},
+			},
+		}
+		// Create the ClusterResourceSet.
+		g.Expect(env.Create(ctx, clusterResourceSetInstance)).To(Succeed())
+
+		// Wait until ClusterResourceSetBinding is created for the Cluster
+		clusterResourceSetBindingKey := client.ObjectKey{
+			Namespace: testCluster.Namespace,
+			Name:      testCluster.Name,
+		}
+
+		t.Log("Getting ClusterResourceSetBinding")
+		oldHash := ""
+		g.Eventually(func() bool {
+			binding := &addonsv1.ClusterResourceSetBinding{}
+			err := env.Get(ctx, clusterResourceSetBindingKey, binding)
+			if err != nil {
+				return false
+			}
+
+			bindings := binding.Spec.Bindings
+			// should only have one binding
+			if len(bindings) != 1 {
+				return false
+			}
+
+			// only one resource is applied
+			resource := bindings[0].Resources[0]
+			oldHash = resource.Hash
+			return resource.Applied
+		}, timeout).Should(BeTrue())
+
+		// Get configmap obj, update the configmap
+		cmKey := client.ObjectKey{
+			Namespace: ns.Name,
+			Name:      configmapName,
+		}
+		cm := &corev1.ConfigMap{}
+		g.Expect(env.Get(ctx, cmKey, cm)).To(Succeed())
+
+		cmUpdate := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            cm.GetName(),
+				Namespace:       cm.GetNamespace(),
+				ResourceVersion: cm.ResourceVersion,
+				UID:             cm.GetUID(),
+			},
+			Data: map[string]string{
+				"cm": `kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: resource-configmap
+  namespace: default
+data:
+  hello: "world!"`,
+			},
+		}
+
+		// update the configmap data
+		t.Log("Updating the configmap resource")
+		g.Expect(env.Update(ctx, cmUpdate)).To(Succeed())
+
+		t.Log("Check if reconciled hash has updated for the changed configmap resource")
+		g.Eventually(func() bool {
+			binding := &addonsv1.ClusterResourceSetBinding{}
+			err := env.Get(ctx, clusterResourceSetBindingKey, binding)
+			if err != nil {
+				return false
+			}
+
+			bindings := binding.Spec.Bindings
+			// should only have one binding
+			if len(bindings) != 1 {
+				return false
+			}
+
+			// only one resource is applied
+			resource := bindings[0].Resources[0]
+			return resource.Hash != oldHash
+		}, timeout).Should(BeTrue())
+	})
+
+	t.Run("Should create ClusterResourceSet with strategy 'AlwaysApply' and reconcile when secret changes data", func(t *testing.T) {
+		g := NewWithT(t)
+		ns := setup(t, g)
+		defer teardown(t, g, ns)
+
+		t.Log("Updating the cluster with labels")
+		testCluster.SetLabels(labels)
+		g.Expect(env.Update(ctx, testCluster)).To(Succeed())
+
+		clusterResourceSetInstance := &addonsv1.ClusterResourceSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterResourceSetName,
+				Namespace: ns.Name,
+			},
+			Spec: addonsv1.ClusterResourceSetSpec{
+				ClusterSelector: metav1.LabelSelector{
+					MatchLabels: labels,
+				},
+				Strategy:  "ApplyAlways",
+				Resources: []addonsv1.ResourceRef{{Name: secretName, Kind: "Secret"}},
+			},
+		}
+		// Create the ClusterResourceSet.
+		g.Expect(env.Create(ctx, clusterResourceSetInstance)).To(Succeed())
+
+		// Wait until ClusterResourceSetBinding is created for the Cluster
+		clusterResourceSetBindingKey := client.ObjectKey{
+			Namespace: testCluster.Namespace,
+			Name:      testCluster.Name,
+		}
+
+		t.Log("Getting ClusterResourceSetBinding")
+		oldHash := ""
+		g.Eventually(func() bool {
+			binding := &addonsv1.ClusterResourceSetBinding{}
+			err := env.Get(ctx, clusterResourceSetBindingKey, binding)
+			if err != nil {
+				return false
+			}
+
+			bindings := binding.Spec.Bindings
+			// should only have one binding
+			if len(bindings) != 1 {
+				return false
+			}
+
+			// only one resource is applied
+			resource := bindings[0].Resources[0]
+			oldHash = resource.Hash
+			return resource.Applied
+		}, timeout).Should(BeTrue())
+
+		secretKey := client.ObjectKey{
+			Namespace: ns.Name,
+			Name:      secretName,
+		}
+		secret := &corev1.Secret{}
+		g.Expect(env.Get(ctx, secretKey, secret)).To(Succeed())
+
+		secretUpdate := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            secret.GetName(),
+				Namespace:       secret.GetNamespace(),
+				ResourceVersion: secret.ResourceVersion,
+				UID:             secret.GetUID(),
+			},
+			Type: "addons.cluster.x-k8s.io/resource-set",
+			StringData: map[string]string{
+				"cm": `kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: resource-configmap
+  namespace: default
+data:
+  hello: "world!"`,
+			},
+		}
+
+		// update the secret data
+		t.Log("Updating the secret resource")
+		g.Expect(env.Update(ctx, secretUpdate)).To(Succeed())
+
+		t.Log("Check if reconciled hash has updated for the changed secret resource")
+		g.Eventually(func() bool {
+			binding := &addonsv1.ClusterResourceSetBinding{}
+			err := env.Get(ctx, clusterResourceSetBindingKey, binding)
+			if err != nil {
+				return false
+			}
+
+			bindings := binding.Spec.Bindings
+			// should only have one binding
+			if len(bindings) != 1 {
+				return false
+			}
+
+			// only one resource is applied
+			resource := bindings[0].Resources[0]
+			return resource.Hash != oldHash
+		}, timeout).Should(BeTrue())
+	})
+
+	t.Run("Should create ClusterResourceSet with strategy 'AlwaysApply' and reconcile configmap only once if data has not changed", func(t *testing.T) {
+		g := NewWithT(t)
+		ns := setup(t, g)
+		defer teardown(t, g, ns)
+
+		t.Log("Updating the cluster with labels")
+		testCluster.SetLabels(labels)
+		g.Expect(env.Update(ctx, testCluster)).To(Succeed())
+
+		clusterResourceSetInstance := &addonsv1.ClusterResourceSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterResourceSetName,
+				Namespace: ns.Name,
+			},
+			Spec: addonsv1.ClusterResourceSetSpec{
+				ClusterSelector: metav1.LabelSelector{
+					MatchLabels: labels,
+				},
+				Strategy:  "ApplyAlways",
+				Resources: []addonsv1.ResourceRef{{Name: configmapName, Kind: "ConfigMap"}},
+			},
+		}
+		// Create the ClusterResourceSet.
+		g.Expect(env.Create(ctx, clusterResourceSetInstance)).To(Succeed())
+
+		// Wait until ClusterResourceSetBinding is created for the Cluster
+		clusterResourceSetBindingKey := client.ObjectKey{
+			Namespace: testCluster.Namespace,
+			Name:      testCluster.Name,
+		}
+
+		// Wait until ClusterResourceSetBinding is created for the Cluster
+		t.Log("Waiting for the ClusterResourceSetBinding to be created")
+		oldHash := ""
+		var oldLastAppliedTime *metav1.Time
+		g.Eventually(func() bool {
+			binding := &addonsv1.ClusterResourceSetBinding{}
+			err := env.Get(ctx, clusterResourceSetBindingKey, binding)
+			if err != nil {
+				return false
+			}
+
+			bindings := binding.Spec.Bindings
+			// should only have one binding
+			if len(bindings) != 1 {
+				return false
+			}
+
+			// only one resource is applied
+			resource := bindings[0].Resources[0]
+			oldHash = resource.Hash
+			oldLastAppliedTime = resource.LastAppliedTime
+			return resource.Applied
+		}, timeout).Should(BeTrue())
+
+		// Get configmap obj, update the configmap
+		cmKey := client.ObjectKey{
+			Namespace: ns.Name,
+			Name:      configmapName,
+		}
+		cm := &corev1.ConfigMap{}
+		g.Expect(env.Get(ctx, cmKey, cm)).To(Succeed())
+
+		cm.Labels = map[string]string{"foo": "bar"}
+
+		// The CRS controller writes a lastAppliedTime field, which is of type metav1.Time. The precision at most a
+		// second. Therefore, if the controller re-applies the resource twice within one second, the lastAppliedTime
+		// value is unlikely to change. Our test below compares the lastAppliedTime values of two reconciles, so we wait
+		// to prevent the reconciles from running within the same second. Related issue: https://issues.k8s.io/15262
+		t.Log("Letting some time pass before updating the resource, so that lastAppliedTime will be different.")
+		time.Sleep(2 * time.Second)
+
+		// update the configmap data
+		t.Log("Updating the configmap resource")
+		g.Expect(env.Update(ctx, cm)).To(Succeed())
+
+		t.Log("Verifying that resource is not re-applied over a period of time.")
+		g.Consistently(func() bool {
+			binding := &addonsv1.ClusterResourceSetBinding{}
+			err := env.Get(ctx, clusterResourceSetBindingKey, binding)
+			if err != nil {
+				return false
+			}
+
+			bindings := binding.Spec.Bindings
+			// only one resource is applied
+			resource := bindings[0].Resources[0]
+			return oldHash == resource.Hash && oldLastAppliedTime.Equal(resource.LastAppliedTime)
+		}, timeout).Should(BeTrue())
+	})
+
+	t.Run("Should create ClusterResourceSet with strategy 'AlwaysApply' and reconcile secrets only once if data has not changed", func(t *testing.T) {
+		g := NewWithT(t)
+		ns := setup(t, g)
+		defer teardown(t, g, ns)
+
+		t.Log("Updating the cluster with labels")
+		testCluster.SetLabels(labels)
+		g.Expect(env.Update(ctx, testCluster)).To(Succeed())
+
+		clusterResourceSetInstance := &addonsv1.ClusterResourceSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterResourceSetName,
+				Namespace: ns.Name,
+			},
+			Spec: addonsv1.ClusterResourceSetSpec{
+				ClusterSelector: metav1.LabelSelector{
+					MatchLabels: labels,
+				},
+				Strategy:  "ApplyAlways",
+				Resources: []addonsv1.ResourceRef{{Name: secretName, Kind: "Secret"}},
+			},
+		}
+		// Create the ClusterResourceSet.
+		g.Expect(env.Create(ctx, clusterResourceSetInstance)).To(Succeed())
+
+		// Wait until ClusterResourceSetBinding is created for the Cluster
+		clusterResourceSetBindingKey := client.ObjectKey{
+			Namespace: testCluster.Namespace,
+			Name:      testCluster.Name,
+		}
+
+		t.Log("Waiting for the ClusterResourceSetBinding to be created")
+		oldHash := ""
+		var oldLastAppliedTime *metav1.Time
+		g.Eventually(func() bool {
+			binding := &addonsv1.ClusterResourceSetBinding{}
+			err := env.Get(ctx, clusterResourceSetBindingKey, binding)
+			if err != nil {
+				return false
+			}
+
+			bindings := binding.Spec.Bindings
+			// should only have one binding
+			if len(bindings) != 1 {
+				return false
+			}
+
+			// only one resource is applied
+			resource := bindings[0].Resources[0]
+			oldHash = resource.Hash
+			oldLastAppliedTime = resource.LastAppliedTime
+			return resource.Applied
+		}, timeout).Should(BeTrue())
+
+		secretKey := client.ObjectKey{
+			Namespace: ns.Name,
+			Name:      secretName,
+		}
+		secret := &corev1.Secret{}
+		g.Expect(env.Get(ctx, secretKey, secret)).To(Succeed())
+
+		// Overwrite the Secret labels to cause the ClusterResourceSet controller to reconcile any CRS that references
+		// the Secret.
+		secret.Labels = map[string]string{"foo": "bar"}
+
+		// The CRS controller writes a lastAppliedTime field, which is of type metav1.Time. The precision at most a
+		// second. Therefore, if the controller re-applies the resource twice within one second, the lastAppliedTime
+		// value is unlikely to change. Our test below compares the lastAppliedTime values of two reconciles, so we wait
+		// to prevent the reconciles from running within the same second. Related issue: https://issues.k8s.io/15262
+		t.Log("Letting some time pass before updating the resource, so that lastAppliedTime will be different.")
+		time.Sleep(2 * time.Second)
+
+		// update the secrete, but not its data
+		t.Log("Updating the secret resource")
+		g.Expect(env.Update(ctx, secret)).To(Succeed())
+
+		t.Log("Verifying that resource is not re-applied over a period of time.")
+		g.Consistently(func() bool {
+			binding := &addonsv1.ClusterResourceSetBinding{}
+			err := env.Get(ctx, clusterResourceSetBindingKey, binding)
+			if err != nil {
+				return false
+			}
+
+			bindings := binding.Spec.Bindings
+			// only one resource is applied
+			resource := bindings[0].Resources[0]
+			return oldHash == resource.Hash && oldLastAppliedTime.Equal(resource.LastAppliedTime)
 		}, timeout).Should(BeTrue())
 	})
 }

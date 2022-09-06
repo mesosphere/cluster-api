@@ -29,6 +29,9 @@ const (
 
 	// ClusterResourceSetFinalizer is added to the ClusterResourceSet object for additional cleanup logic on deletion.
 	ClusterResourceSetFinalizer = "addons.cluster.x-k8s.io"
+
+	// ClusterResourceSetCompressedAnnotation is added to a Secret or ConfigMap with compressed data.
+	ClusterResourceSetCompressedAnnotation = "addons.cluster.x-k8s.io/resource-set-compressed"
 )
 
 // ANCHOR: ClusterResourceSetSpec

@@ -310,7 +310,6 @@ func (r *ClusterResourceSetReconciler) ApplyClusterResourceSet(ctx context.Conte
 			errList = append(errList, err)
 		}
 
-		// Since maps are not ordered, we need to order them to get the same hash at each reconcile.
 		data, ok := unstructuredObj.UnstructuredContent()["data"]
 		if !ok {
 			errList = append(errList, errors.New("failed to get data field from the resource"))

@@ -38,6 +38,7 @@ import (
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	addonsv1 "sigs.k8s.io/cluster-api/exp/addons/api/v1beta1"
+	utiladdons "sigs.k8s.io/cluster-api/exp/addons/util"
 	"sigs.k8s.io/cluster-api/util"
 	utilresource "sigs.k8s.io/cluster-api/util/resource"
 	utilyaml "sigs.k8s.io/cluster-api/util/yaml"
@@ -219,7 +220,65 @@ func computeHash(dataArr [][]byte) string {
 	return fmt.Sprintf("sha256:%x", hash.Sum(nil))
 }
 
-func getDataListAndHash(resourceKind string, unstructuredData map[string]interface{}, errList *[]error) ([][]byte, string) {
+type data struct {
+	values [][]byte
+	hash   string
+	errors []error
+}
+
+func (d *data) Values() [][]byte {
+	return d.values
+}
+
+func (d *data) Hash() string {
+	return d.hash
+}
+
+func (d *data) ReadValueErrors() []error {
+	return d.errors
+}
+
+func dataFromResource(src *unstructured.Unstructured) (*data, error) {
+	kind := src.GetKind()
+
+	compressed := utiladdons.IsCompressed(src)
+	var encoded bool
+	var field string
+	switch kind {
+	case string(addonsv1.ConfigMapClusterResourceSetResourceKind):
+		if compressed {
+			field = "binaryData"
+			encoded = true
+		} else {
+			field = "data"
+			encoded = false
+		}
+	case string(addonsv1.SecretClusterResourceSetResourceKind):
+		field = "data"
+		encoded = true
+	default:
+		return nil, fmt.Errorf("resource kind is %q, must be ConfigMap or Secret", kind)
+	}
+
+	tmp := src.DeepCopy()
+	if compressed {
+		var err error
+		tmp, err = utiladdons.Decompress(src)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	unstructuredData, ok, err := unstructured.NestedMap(tmp.UnstructuredContent(), field)
+	if err != nil {
+		return nil, fmt.Errorf("reading data from field %q: %w", field, err)
+	}
+	if !ok {
+		return nil, fmt.Errorf("field %q not found", field)
+	}
+
+	d := &data{}
+
 	// Since maps are not ordered, we need to order them to get the same hash at each reconcile.
 	keys := make([]string, 0)
 
@@ -228,22 +287,23 @@ func getDataListAndHash(resourceKind string, unstructuredData map[string]interfa
 	}
 	sort.Strings(keys)
 
-	dataList := make([][]byte, 0)
+	d.values = make([][]byte, 0)
 	for _, key := range keys {
 		val, ok, err := unstructured.NestedString(unstructuredData, key)
 		if !ok || err != nil {
-			*errList = append(*errList, errors.New("failed to get value field from the resource"))
+			d.errors = append(d.errors, errors.New("failed to get value field from the resource"))
 			continue
 		}
 
 		byteArr := []byte(val)
-		// If the resource is a Secret, data needs to be decoded.
-		if resourceKind == string(addonsv1.SecretClusterResourceSetResourceKind) {
+		if encoded {
 			byteArr, _ = base64.StdEncoding.DecodeString(val)
 		}
 
-		dataList = append(dataList, byteArr)
+		d.values = append(d.values, byteArr)
 	}
 
-	return dataList, computeHash(dataList)
+	d.hash = computeHash(d.values)
+
+	return d, nil
 }

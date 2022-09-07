@@ -48,10 +48,8 @@ import (
 	"sigs.k8s.io/cluster-api/util/predicates"
 )
 
-var (
-	// ErrSecretTypeNotSupported signals that a Secret is not supported.
-	ErrSecretTypeNotSupported = errors.New("unsupported secret type")
-)
+// ErrSecretTypeNotSupported signals that a Secret is not supported.
+var ErrSecretTypeNotSupported = errors.New("unsupported secret type")
 
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;patch
@@ -93,7 +91,6 @@ func (r *ClusterResourceSetReconciler) SetupWithManager(ctx context.Context, mgr
 		WithOptions(options).
 		WithEventFilter(predicates.ResourceNotPausedAndHasFilterLabel(ctrl.LoggerFrom(ctx), r.WatchFilterValue)).
 		Complete(r)
-
 	if err != nil {
 		return errors.Wrap(err, "failed setting up with a controller manager")
 	}
@@ -319,17 +316,16 @@ func (r *ClusterResourceSetReconciler) ApplyClusterResourceSet(ctx context.Conte
 			errList = append(errList, err)
 		}
 
-		data, ok := unstructuredObj.UnstructuredContent()["data"]
-		if !ok {
-			errList = append(errList, errors.New("failed to get data field from the resource"))
+		data, err := dataFromResource(unstructuredObj)
+		if err != nil {
+			errList = append(errList, fmt.Errorf("failed to get data from the resource: %w", err))
 			continue
 		}
-
-		// now calculate the new hash to compare with the old
-		dataList, newHash := getDataListAndHash(unstructuredObj.GetKind(), data.(map[string]interface{}), &errList)
+		// Read value errors are not fatal in the original CRS implementation.
+		errList = append(errList, data.ReadValueErrors()...)
 
 		// This is where we determine if we continue the process or not.
-		if isAlreadyApplied && oldHash == newHash {
+		if isAlreadyApplied && oldHash == data.Hash() {
 			log.Info("the resource has already been applied and data is identical, no need to re-apply, moving on to next resource", "Resource kind", resource.Kind, "Resource name", resource.Name)
 			// if we have the same has, move on to the next resource
 			continue
@@ -338,8 +334,8 @@ func (r *ClusterResourceSetReconciler) ApplyClusterResourceSet(ctx context.Conte
 		// Apply all values in the key-value pair of the resource to the cluster.
 		// As there can be multiple key-value pairs in a resource, each value may have multiple objects in it.
 		isSuccessful := true
-		for i := range dataList {
-			data := dataList[i]
+		for i := range data.Values() {
+			data := data.Values()[i]
 
 			if err := apply(ctx, remoteClient, strategy, data); err != nil {
 				isSuccessful = false
@@ -351,7 +347,7 @@ func (r *ClusterResourceSetReconciler) ApplyClusterResourceSet(ctx context.Conte
 
 		resourceSetBinding.SetBinding(addonsv1.ResourceBinding{
 			ResourceRef:     resource,
-			Hash:            newHash,
+			Hash:            data.Hash(),
 			Applied:         isSuccessful,
 			LastAppliedTime: &metav1.Time{Time: time.Now().UTC()},
 		})

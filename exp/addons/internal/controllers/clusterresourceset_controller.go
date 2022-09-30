@@ -215,7 +215,7 @@ func (r *ClusterResourceSetReconciler) getClustersByClusterResourceSetSelector(c
 		return nil, errors.Wrap(err, "failed to list clusters")
 	}
 
-	clusters := make([]*clusterv1.Cluster, 0)
+	clusters := []*clusterv1.Cluster{}
 	for i := range clusterList.Items {
 		c := &clusterList.Items[i]
 		if c.DeletionTimestamp.IsZero() {
@@ -423,7 +423,7 @@ func (r *ClusterResourceSetReconciler) patchOwnerRefToResource(ctx context.Conte
 
 // clusterToClusterResourceSet is mapper function that maps clusters to ClusterResourceSet.
 func (r *ClusterResourceSetReconciler) clusterToClusterResourceSet(o client.Object) []ctrl.Request {
-	result := make([]ctrl.Request, 0)
+	result := []ctrl.Request{}
 
 	cluster, ok := o.(*clusterv1.Cluster)
 	if !ok {
@@ -461,7 +461,7 @@ func (r *ClusterResourceSetReconciler) clusterToClusterResourceSet(o client.Obje
 
 // resourceToClusterResourceSet is mapper function that maps resources to ClusterResourceSet.
 func (r *ClusterResourceSetReconciler) resourceToClusterResourceSet(o client.Object) []ctrl.Request {
-	result := make([]ctrl.Request, 0)
+	result := []ctrl.Request{}
 
 	// Add all ClusterResourceSet owners.
 	for _, owner := range o.GetOwnerReferences() {

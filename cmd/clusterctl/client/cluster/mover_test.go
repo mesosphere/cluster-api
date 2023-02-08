@@ -1113,7 +1113,7 @@ func Test_objectMover_move_dryRun(t *testing.T) {
 				dryRun:    true,
 			}
 
-			err := mover.move(graph, toProxy, nil)
+			err := mover.move(graph, toProxy)
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())
 				return
@@ -1226,7 +1226,7 @@ func Test_objectMover_move(t *testing.T) {
 			if includeMutator {
 				mutators = append(mutators, namespaceMutator)
 			}
-			err := mover.move(graph, toProxy, mutators)
+			err := mover.move(graph, toProxy, mutators...)
 
 			if tt.wantErr {
 				g.Expect(err).To(HaveOccurred())

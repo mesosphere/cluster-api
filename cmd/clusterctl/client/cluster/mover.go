@@ -370,7 +370,7 @@ func (o *objectMover) move(graph *objectGraph, toProxy Proxy, mutators ...Resour
 	// Create all objects group by group, ensuring all the ownerReferences are re-created.
 	log.Info("Creating objects in the target cluster")
 	for groupIndex := 0; groupIndex < len(moveSequence.groups); groupIndex++ {
-		if err := o.createGroup(moveSequence.getGroup(groupIndex), toProxy, mutators); err != nil {
+		if err := o.createGroup(moveSequence.getGroup(groupIndex), toProxy, mutators...); err != nil {
 			return err
 		}
 	}
@@ -579,7 +579,7 @@ func setClusterPause(proxy Proxy, clusters []*node, value bool, dryRun bool, mut
 
 		// Nb. The operation is wrapped in a retry loop to make setClusterPause more resilient to unexpected conditions.
 		if err := retryWithExponentialBackoff(setClusterPauseBackoff, func() error {
-			return patchCluster(proxy, cluster, patch, mutators)
+			return patchCluster(proxy, cluster, patch, mutators...)
 		}); err != nil {
 			return errors.Wrapf(err, "error setting Cluster.Spec.Paused=%t", value)
 		}
@@ -606,7 +606,7 @@ func setClusterClassPause(proxy Proxy, clusterclasses []*node, pause bool, dryRu
 
 		// Nb. The operation is wrapped in a retry loop to make setClusterClassPause more resilient to unexpected conditions.
 		if err := retryWithExponentialBackoff(setClusterClassPauseBackoff, func() error {
-			return pauseClusterClass(proxy, clusterclass, pause, mutators)
+			return pauseClusterClass(proxy, clusterclass, pause, mutators...)
 		}); err != nil {
 			return errors.Wrapf(err, "error updating ClusterClass %s/%s", clusterclass.identity.Namespace, clusterclass.identity.Name)
 		}
@@ -615,7 +615,7 @@ func setClusterClassPause(proxy Proxy, clusterclasses []*node, pause bool, dryRu
 }
 
 // patchCluster applies a patch to a node referring to a Cluster object.
-func patchCluster(proxy Proxy, n *node, patch client.Patch, mutators []ResourceMutatorFunc) error {
+func patchCluster(proxy Proxy, n *node, patch client.Patch, mutators ...ResourceMutatorFunc) error {
 	cFrom, err := proxy.NewClient()
 	if err != nil {
 		return err
@@ -644,7 +644,7 @@ func patchCluster(proxy Proxy, n *node, patch client.Patch, mutators []ResourceM
 	return nil
 }
 
-func pauseClusterClass(proxy Proxy, n *node, pause bool, mutators []ResourceMutatorFunc) error {
+func pauseClusterClass(proxy Proxy, n *node, pause bool, mutators ...ResourceMutatorFunc) error {
 	cFrom, err := proxy.NewClient()
 	if err != nil {
 		return errors.Wrap(err, "error creating client")
@@ -790,7 +790,7 @@ func (o *objectMover) ensureNamespace(toProxy Proxy, namespace string) error {
 }
 
 // createGroup creates all the Kubernetes objects into the target management cluster corresponding to the object graph nodes in a moveGroup.
-func (o *objectMover) createGroup(group moveGroup, toProxy Proxy, mutators []ResourceMutatorFunc) error {
+func (o *objectMover) createGroup(group moveGroup, toProxy Proxy, mutators ...ResourceMutatorFunc) error {
 	createTargetObjectBackoff := newWriteBackoff()
 	errList := []error{}
 

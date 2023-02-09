@@ -24,7 +24,8 @@ SHELL:=/usr/bin/env bash
 # Go.
 #
 GO_VERSION ?= 1.19.5
-GO_CONTAINER_IMAGE ?= docker.io/library/golang:$(GO_VERSION)
+# NOTE(dkoshkin): this is 1.19.5 without the git version bump causing build breakage because of .git ownership mismatches
+GO_CONTAINER_IMAGE ?= docker.io/library/golang@sha256:bb9811fad43a7d6fd2173248d8331b2dcf5ac9af20976b1937ecd214c5b8c383
 
 # Use GOPROXY environment variable if set
 GOPROXY := $(shell go env GOPROXY)
@@ -908,7 +909,7 @@ release-binary: $(RELEASE_DIR)
 		-e GOARCH=$(GOARCH) \
 		-v "$$(pwd):/workspace$(DOCKER_VOL_OPTS)" \
 		-w /workspace \
-		golang:$(GO_VERSION) \
+		$(GO_CONTAINER_IMAGE) \
 		go build -a -trimpath -ldflags "$(LDFLAGS) -extldflags '-static'" \
 		-o $(RELEASE_DIR)/$(notdir $(RELEASE_BINARY)) $(BUILD_PATH)
 

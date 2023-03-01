@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	dockercontainer "github.com/docker/docker/api/types/container"
+	"github.com/docker/go-units"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/kind/pkg/cluster/constants"
@@ -54,6 +56,7 @@ type nodeCreateOpts struct {
 	PortMappings []v1alpha4.PortMapping
 	Labels       map[string]string
 	IPFamily     clusterv1.ClusterIPFamily
+	Resources    dockercontainer.Resources
 }
 
 // CreateControlPlaneNode will create a new control plane container.
@@ -111,6 +114,18 @@ func (m *Manager) CreateExternalLoadBalancerNode(ctx context.Context, name, imag
 		ContainerPort: ControlPlanePort,
 		Protocol:      v1alpha4.PortMappingProtocolTCP,
 	}}
+
+	// load balancer resource limits
+	resources := dockercontainer.Resources{
+		Ulimits: []*units.Ulimit{
+			{
+				Name: "nofile",
+				Soft: 65536,
+				Hard: 65536,
+			},
+		},
+	}
+
 	createOpts := &nodeCreateOpts{
 		Name:         name,
 		Image:        image,
@@ -118,6 +133,7 @@ func (m *Manager) CreateExternalLoadBalancerNode(ctx context.Context, name, imag
 		Role:         constants.ExternalLoadBalancerNodeRoleValue,
 		PortMappings: portMappings,
 		EntryPoint:   haproxyEntrypoint,
+		Resources:    resources,
 	}
 	node, err := createNode(ctx, createOpts)
 	if err != nil {
@@ -157,7 +173,8 @@ func createNode(ctx context.Context, opts *nodeCreateOpts) (*types.Node, error) 
 			"/tmp": "", // various things depend on working /tmp
 			"/run": "", // systemd wants a writable /run
 		},
-		IPFamily: opts.IPFamily,
+		Resources: opts.Resources,
+		IPFamily:  opts.IPFamily,
 	}
 	if opts.Role == constants.ControlPlaneNodeRoleValue {
 		runOptions.EnvironmentVars = map[string]string{

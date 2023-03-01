@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 
+	dockercontainer "github.com/docker/docker/api/types/container"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/test/infrastructure/kind"
 )
@@ -101,6 +102,8 @@ type RunContainerInput struct {
 	RestartPolicy string
 	// Defines how the kindest/node image must be started.
 	KindMode kind.Mode
+	// Resource limits and settings for the container.
+	Resources dockercontainer.Resources
 }
 
 // ExecContainerInput contains values for running exec on a container.

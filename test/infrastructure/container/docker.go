@@ -400,6 +400,7 @@ func (d *dockerRuntime) RunContainer(ctx context.Context, runConfig *RunContaine
 		PortBindings:  nat.PortMap{},
 		RestartPolicy: dockercontainer.RestartPolicy{Name: restartPolicy, MaximumRetryCount: restartMaximumRetryCount},
 		Init:          pointer.Bool(false),
+		Resources:     runConfig.Resources,
 	}
 	networkConfig := network.NetworkingConfig{}
 

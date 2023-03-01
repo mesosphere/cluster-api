@@ -628,8 +628,7 @@ func patchCluster(proxy Proxy, n *node, patch client.Patch, mutators ...Resource
 	clusterObj.SetName(n.identity.Name)
 	clusterObj.SetNamespace(n.identity.Namespace)
 	for _, mutator := range mutators {
-		err = mutator(clusterObj)
-		if err != nil {
+		if err = mutator(clusterObj); err != nil {
 			return errors.Wrapf(err, "error applying resource mutator to %q %s/%s",
 				clusterObj.GroupVersionKind(), clusterObj.GetNamespace(), clusterObj.GetName())
 		}
@@ -661,8 +660,7 @@ func pauseClusterClass(proxy Proxy, n *node, pause bool, mutators ...ResourceMut
 	clusterClass.SetName(n.identity.Name)
 	clusterClass.SetNamespace(n.identity.Namespace)
 	for _, mutator := range mutators {
-		err = mutator(clusterClass)
-		if err != nil {
+		if err = mutator(clusterClass); err != nil {
 			return errors.Wrapf(err, "error applying resource mutator to %q %s/%s",
 				clusterClass.GroupVersionKind(), clusterClass.GetNamespace(), clusterClass.GetName())
 		}
@@ -917,8 +915,7 @@ func (o *objectMover) createTargetObject(nodeToCreate *node, toProxy Proxy, muta
 	}
 
 	for _, mutator := range mutators {
-		err = mutator(obj)
-		if err != nil {
+		if err = mutator(obj); err != nil {
 			return errors.Wrapf(err, "error applying resource mutator to %q %s/%s",
 				obj.GroupVersionKind(), obj.GetNamespace(), obj.GetName())
 		}

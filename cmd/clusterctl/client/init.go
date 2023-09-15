@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	clusterctlv1 "sigs.k8s.io/cluster-api/cmd/clusterctl/api/v1alpha3"
 	"sigs.k8s.io/cluster-api/cmd/clusterctl/client/cluster"
@@ -91,6 +92,7 @@ type InitOptions struct {
 // Init initializes a management cluster by adding the requested list of providers.
 func (c *clusterctlClient) Init(options InitOptions) ([]Components, error) {
 	log := logf.Log
+	ctrl.SetLogger(log)
 
 	// Default WaitProviderTimeout as we cannot rely on defaulting in the CLI
 	// when clusterctl is used as a library.

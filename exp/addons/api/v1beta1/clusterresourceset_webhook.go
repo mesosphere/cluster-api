@@ -48,6 +48,8 @@ func (m *ClusterResourceSet) Default() {
 	// ClusterResourceSet Strategy defaults to ApplyOnce.
 	if m.Spec.Strategy == "" {
 		m.Spec.Strategy = string(ClusterResourceSetStrategyApplyOnce)
+	} else if m.Spec.Strategy == string(ClusterResourceSetStrategyApplyAlways) {
+		m.Spec.Strategy = string(ClusterResourceSetStrategyReconcile)
 	}
 }
 
@@ -98,10 +100,15 @@ func (m *ClusterResourceSet) validate(old *ClusterResourceSet) error {
 	}
 
 	if old != nil && old.Spec.Strategy != "" && old.Spec.Strategy != m.Spec.Strategy {
-		allErrs = append(
-			allErrs,
-			field.Invalid(field.NewPath("spec", "strategy"), m.Spec.Strategy, "field is immutable"),
-		)
+		// Allow changing from ApplyAlways (a strategy that was added in this fork) to Reconcile.
+		// ApplyAlways is an "alias" for Reconcile and migrating to Reconcile will enable us to stop using a fork.
+		if !(old.Spec.Strategy == string(ClusterResourceSetStrategyApplyAlways) &&
+			m.Spec.Strategy == string(ClusterResourceSetStrategyReconcile)) {
+			allErrs = append(
+				allErrs,
+				field.Invalid(field.NewPath("spec", "strategy"), m.Spec.Strategy, "field is immutable"),
+			)
+		}
 	}
 
 	if old != nil && !reflect.DeepEqual(old.Spec.ClusterSelector, m.Spec.ClusterSelector) {

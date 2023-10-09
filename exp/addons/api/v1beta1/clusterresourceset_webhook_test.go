@@ -38,6 +38,23 @@ func TestClusterResourcesetDefault(t *testing.T) {
 	g.Expect(clusterResourceSet.Spec.Strategy).To(Equal(string(ClusterResourceSetStrategyApplyOnce)))
 }
 
+func TestClusterResourcesetDefaultWithClusterResourceSetStrategyApplyAlways(t *testing.T) {
+	g := NewWithT(t)
+	clusterResourceSet := &ClusterResourceSet{
+		Spec: ClusterResourceSetSpec{
+			Strategy: string(ClusterResourceSetStrategyApplyAlways),
+		},
+	}
+	defaultingValidationCRS := clusterResourceSet.DeepCopy()
+	defaultingValidationCRS.Spec.ClusterSelector = metav1.LabelSelector{
+		MatchLabels: map[string]string{"foo": "bar"},
+	}
+	t.Run("for ClusterResourceSet", utildefaulting.DefaultValidateTest(defaultingValidationCRS))
+	clusterResourceSet.Default()
+
+	g.Expect(clusterResourceSet.Spec.Strategy).To(Equal(string(ClusterResourceSetStrategyReconcile)))
+}
+
 func TestClusterResourceSetLabelSelectorAsSelectorValidation(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -102,6 +119,18 @@ func TestClusterResourceSetStrategyImmutable(t *testing.T) {
 			name:        "when the Strategy has changed",
 			oldStrategy: string(ClusterResourceSetStrategyApplyOnce),
 			newStrategy: "",
+			expectErr:   true,
+		},
+		{
+			name:        "when the Strategy has changed, but the old value was ApplyAlways",
+			oldStrategy: string(ClusterResourceSetStrategyApplyAlways),
+			newStrategy: string(ClusterResourceSetStrategyReconcile),
+			expectErr:   false,
+		},
+		{
+			name:        "when the Strategy has changed, but the old value was ApplyAlways and the new value is ApplyOnce",
+			oldStrategy: string(ClusterResourceSetStrategyApplyAlways),
+			newStrategy: string(ClusterResourceSetStrategyApplyOnce),
 			expectErr:   true,
 		},
 	}

@@ -89,6 +89,7 @@ jobs:
           echo "PROD_REGISTRY=${REGISTRY}" >> $GITHUB_ENV
           echo "STAGING_REGISTRY=${REGISTRY}" >> $GITHUB_ENV
           echo "TAG=${RELEASE_TAG}" >> $GITHUB_ENV
+          echo "PULL_POLICY=IfNotPresent" >> $GITHUB_ENV
         env:
           RELEASE_TAG: ${{needs.push_release_tags.outputs.release_tag}}
           REGISTRY: docker.io/mesosphere
@@ -124,4 +125,5 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
       - name: Build and push docker images
         run: |
-          make ALL_ARCH="amd64 arm64" release-staging
+          make ALL_ARCH="amd64 arm64" docker-build-all
+          make ALL_ARCH="amd64 arm64" docker-push-all

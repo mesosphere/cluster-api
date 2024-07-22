@@ -167,7 +167,23 @@ func (k *proxy) NewClient(ctx context.Context) (client.Client, error) {
 	connectBackoff := newConnectBackoff()
 	if err := retryWithExponentialBackoff(ctx, connectBackoff, func(_ context.Context) error {
 		var err error
-		c, err = client.New(config, client.Options{Scheme: localScheme})
+		// FIXME https://jira.nutanix.com/browse/NCN-101602
+		// We want to suppress warnings, i.e. prevent them from being logged.
+		// The controller-runtime client does not override WarningHandler when SuppressWarning is true.
+		// The existing handler remains in effect. The warnings continue to be logged.
+		//
+		// To work around this controller-runtime bug, we:
+		// 1. Make the handler the "no-op" handler, and
+		config.WarningHandler = rest.NoWarnings{}
+		c, err = client.New(config,
+			client.Options{
+				Scheme: localScheme,
+				// 2. Configure the client to suppress warnings
+				WarningHandler: client.WarningHandlerOptions{
+					SuppressWarnings: true,
+				},
+			},
+		)
 		if err != nil {
 			return err
 		}

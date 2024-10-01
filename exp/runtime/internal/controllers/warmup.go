@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	defaultWarmupTimeout  = 60 * time.Second
+	defaultWarmupTimeout  = 5 * time.Minute
 	defaultWarmupInterval = 2 * time.Second
 )
 

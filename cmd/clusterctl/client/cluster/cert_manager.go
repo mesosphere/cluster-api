@@ -19,12 +19,14 @@ package cluster
 import (
 	"context"
 	_ "embed"
+	"slices"
 	"time"
 
 	"github.com/blang/semver/v4"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -201,12 +203,10 @@ func (cm *certManagerClient) install(ctx context.Context, version string, objs [
 // a cert-manager upgrade if necessary.
 func (cm *certManagerClient) PlanUpgrade(ctx context.Context) (CertManagerUpgradePlan, error) {
 	log := logf.Log
-
-	objs, err := cm.proxy.ListResources(ctx, map[string]string{clusterctlv1.ClusterctlCoreLabel: clusterctlv1.ClusterctlCoreLabelCertManagerValue}, certManagerNamespace)
+	objs, err := cm.getFilteredCertManagerResources(ctx)
 	if err != nil {
-		return CertManagerUpgradePlan{}, errors.Wrap(err, "failed get cert manager components")
+		return CertManagerUpgradePlan{}, errors.Wrap(err, "failed to calculate cert-manager components for upgrade")
 	}
-
 	// If there are no cert manager components with the clusterctl labels, it means that cert-manager is externally managed.
 	if len(objs) == 0 {
 		log.V(5).Info("Skipping cert-manager version check because externally managed")
@@ -236,14 +236,30 @@ func (cm *certManagerClient) PlanUpgrade(ctx context.Context) (CertManagerUpgrad
 	}, nil
 }
 
+// getFilteredCertManagerResources gets all relevant objects for a cert-manager installation.
+// It also includes relevant resources in the kube-system namespace, which is used by cert-manager
+// for leader election (https://github.com/cert-manager/cert-manager/issues/6716).
+// It excludes resources that are related to the cert-manager installation, but not relevant
+// to evaluating if cert-manager needs an upgrade.
+func (cm *certManagerClient) getFilteredCertManagerResources(ctx context.Context) ([]unstructured.Unstructured, error) {
+	objs, err := cm.proxy.ListResources(ctx, map[string]string{clusterctlv1.ClusterctlCoreLabel: clusterctlv1.ClusterctlCoreLabelCertManagerValue}, certManagerNamespace, metav1.NamespaceSystem)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list cert-manager components for upgrade")
+	}
+	objs = slices.DeleteFunc(objs, func(obj unstructured.Unstructured) bool {
+		return obj.GetKind() == "Endpoints" || obj.GetKind() == "EndpointSlice"
+	})
+	return objs, nil
+}
+
 // EnsureLatestVersion checks the cert-manager version currently installed, and if it is
 // older than the version currently suggested by clusterctl, upgrades it.
 func (cm *certManagerClient) EnsureLatestVersion(ctx context.Context) error {
 	log := logf.Log
 
-	objs, err := cm.proxy.ListResources(ctx, map[string]string{clusterctlv1.ClusterctlCoreLabel: clusterctlv1.ClusterctlCoreLabelCertManagerValue}, certManagerNamespace)
+	objs, err := cm.getFilteredCertManagerResources(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed get cert manager components")
+		return errors.Wrap(err, "failed to calculate cert-manager components for upgrade")
 	}
 
 	// If there are no cert manager components with the clusterctl labels, it means that cert-manager is externally managed.

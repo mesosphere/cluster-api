@@ -756,6 +756,9 @@ func validateCIDRBlocks(fldPath *field.Path, cidrs []string) field.ErrorList {
 // DefaultAndValidateVariables defaults and validates variables in the Cluster and MachineDeployment/MachinePool topologies based
 // on the definitions in the ClusterClass.
 func DefaultAndValidateVariables(ctx context.Context, cluster, oldCluster *clusterv1.Cluster, clusterClass *clusterv1.ClusterClass) field.ErrorList {
+	if oldCluster != nil && oldCluster.Spec.Topology == nil {
+		return field.ErrorList{}
+	}
 	var allErrs field.ErrorList
 	allErrs = append(allErrs, DefaultVariables(cluster, clusterClass)...)
 
